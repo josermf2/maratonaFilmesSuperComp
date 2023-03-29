@@ -43,9 +43,9 @@ bool checkIfMovieFits(bitset<24>& times, movie movie){
     return true;
 }
 
-vector<movie> sortMoviesByStartTime(vector<movie>& movies) {
+vector<movie> sortMoviesByEndTime(vector<movie>& movies) {
     sort(movies.begin(), movies.end(), [](const movie& a, const movie& b) {
-        return a.startTime < b.startTime;
+        return a.endTime < b.endTime;
     });
     return movies;
 }
@@ -72,10 +72,13 @@ vector<movie> chooseMovies(vector<movie>& movies, vector<int>& categoriesMax){
     vector<movie> chosenMovies;
 
     for (int i = 0; i < movies.size(); i++) {
-        if (checkIfMovieFits(movieTimesOccupied, movies[i]) && categoriesMax[movies[i].category] > 0) {
+        if (checkIfMovieFits(movieTimesOccupied, movies[i]) && categoriesMax[movies[i].category-1] > 0) {
             chosenMovies.push_back(movies[i]);
             movieTimesOccupied = occupiedTimes(movieTimesOccupied, movies[i]);
-            categoriesMax[movies[i].category]--;
+            categoriesMax[movies[i].category-1]--;
+        }
+        if (categoriesMax == vector<int>(categoriesMax.size(), 0)) {
+            break;
         }
     }
 
@@ -121,16 +124,16 @@ int main(int argc, char *argv[]) {
     infile.close();
 
 
-    sortMoviesByStartTime(movies);
+    sortMoviesByEndTime(movies);
 
     filterMovies(movies);
-
+    
     vector<movie> chosenMovies = chooseMovies(movies, categoriesMax);
     
     cout << chosenMovies.size() << endl;
     for (int i = 0; i < chosenMovies.size(); i++) {
         cout << chosenMovies[i].startTime << " " << chosenMovies[i].endTime << " " << chosenMovies[i].category << endl;
     }
-
+    
     return 0;
 }

@@ -35,9 +35,9 @@ bool openFile(const char* filename, ifstream& infile) {
     return true;
 }
 
-vector<movie> sortMoviesByStartTime(vector<movie>& movies) {
+vector<movie> sortMoviesByEndTime(vector<movie>& movies) {
     sort(movies.begin(), movies.end(), [](const movie& a, const movie& b) {
-        return a.startTime < b.startTime;
+        return a.endTime < b.endTime;
     });
     return movies;
 }
@@ -86,19 +86,22 @@ vector<movie> chooseMovies(vector<movie>& movies, vector<int>& categoriesMax){
         double rnd_num = distribution(generator); 
         if (rnd_num <= 0.25) {
             int randomMovieIndex = rand() % movies.size();
-            if (checkIfMovieFits(movieTimesOccupied, movies[randomMovieIndex]) && categoriesMax[movies[randomMovieIndex].category] > 0) {
+            if (checkIfMovieFits(movieTimesOccupied, movies[randomMovieIndex]) && categoriesMax[movies[randomMovieIndex].category-1] > 0) {
                 chosenMovies.push_back(movies[randomMovieIndex]);
                 movieTimesOccupied = occupiedTimes(movieTimesOccupied, movies[randomMovieIndex]);
-                categoriesMax[movies[randomMovieIndex].category]--;
+                categoriesMax[movies[randomMovieIndex].category-1]--;
             }
         }
         else {
-            if (checkIfMovieFits(movieTimesOccupied, movies[i]) && categoriesMax[movies[i].category] > 0) {
+            if (checkIfMovieFits(movieTimesOccupied, movies[i]) && categoriesMax[movies[i].category-1] > 0) {
                 chosenMovies.push_back(movies[i]);
                 movieTimesOccupied = occupiedTimes(movieTimesOccupied, movies[i]);
-                categoriesMax[movies[i].category]--;
+                categoriesMax[movies[i].category-1]--;
 
             }
+        }
+        if (categoriesMax == vector<int>(categoriesMax.size(), 0)) {
+            break;
         }
     }
 
@@ -143,13 +146,13 @@ int main(int argc, char *argv[]) {
     // Close the file
     infile.close();
 
-    sortMoviesByStartTime(movies);
+    sortMoviesByEndTime(movies);
 
     filterMovies(movies);
 
     vector<movie> chosenMovies = chooseMovies(movies, categoriesMax);
     
-    sortMoviesByStartTime(chosenMovies);
+    sortMoviesByEndTime(chosenMovies);
 
     cout << chosenMovies.size() << endl;
     for (int i = 0; i < chosenMovies.size(); i++) {
