@@ -43,21 +43,16 @@ bool checkIfMovieFits(bitset<24>& times, movie movie){
     return true;
 }
 
-vector<movie> sortMoviesByEndTime(vector<movie>& movies) {
+void sortMoviesByEndTime(vector<movie>& movies) {
     sort(movies.begin(), movies.end(), [](const movie& a, const movie& b) {
         return a.endTime < b.endTime;
     });
-    return movies;
 }
 
-vector<movie> filterMovies(vector<movie>& movies) {
-    for (int i = 0; i < movies.size(); i++) {
-        if (movies[i].endTime < movies[i].startTime || movies[i].startTime == movies[i].endTime) {
-            movies.erase(movies.begin() + i);
-            i--;
-        }
-    }
-    return movies;
+void filterMovies(vector<movie>& movies) {
+    movies.erase(remove_if(movies.begin(), movies.end(), [](const movie& m) {
+        return m.endTime <= m.startTime;
+    }), movies.end());
 }
 
 bitset<24> occupiedTimes(bitset<24>& times, movie movie){
