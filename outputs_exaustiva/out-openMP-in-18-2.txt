@@ -1,1 +1,3 @@
-out-openMP-in-18-2.txt
+2
+4 5 2
+6 9 1
