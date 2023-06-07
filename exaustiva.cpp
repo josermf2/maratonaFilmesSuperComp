@@ -57,25 +57,21 @@ vector<movie> chooseMovies(vector<movie>& movies, vector<int>& categoriesMax) {
     vector<movie> chosenMovies;
     int maxMovies = 0;
 
-    // Generate all possible subsets of movies
     int numMovies = movies.size();
     for (int mask = 0; mask < (1 << numMovies); mask++) {
         vector<movie> currentSelection;
         vector<int> categoryCount(categoriesMax.size(), 0);
         bool isValid = true;
 
-        // Check if the number of movies in each category is within the limits
         for (int i = 0; i < numMovies; i++) {
             if (mask & (1 << i)) {
                 movie currentMovie = movies[i];
 
-                // Check if the maximum limit for the category of the current movie has been reached
                 if (categoryCount[currentMovie.category - 1] >= categoriesMax[currentMovie.category - 1]) {
                     isValid = false;
                     break;
                 }
 
-                // Check if the time slot is available
                 if (!isTimeAvailable(currentSelection, currentMovie)) {
                     isValid = false;
                     break;
@@ -86,7 +82,6 @@ vector<movie> chooseMovies(vector<movie>& movies, vector<int>& categoriesMax) {
             }
         }
 
-        // Update the maximum number of movies if the current selection is valid and has more movies
         if (isValid && currentSelection.size() > maxMovies) {
             maxMovies = currentSelection.size();
             chosenMovies = currentSelection;

@@ -2,20 +2,35 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include <algorithm>
 #include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
 #include <thrust/sort.h>
-#include <thrust/execution_policy.h>
+#include <thrust/remove.h>
 
 using namespace std;
 
-struct movie {
+struct Movie {
     int startTime;
     int endTime;
     int category;
 };
 
-bool validateArgs(int argc, char* argv[]) {
+struct CompareEndTime {
+    __host__ __device__
+    bool operator()(const Movie& a, const Movie& b) const {
+        return a.endTime < b.endTime;
+    }
+};
+
+struct IsNotOvernight {
+    __host__ __device__
+    bool operator()(const Movie& movie) const {
+        return movie.endTime <= movie.startTime;
+    }
+};
+
+bool validateArgs(int argc, char *argv[]) {
     if (argc < 2) {
         cerr << "Usage: " << argv[0] << " <filename>" << endl;
         return false;
@@ -34,91 +49,79 @@ bool openFile(const char* filename, ifstream& infile) {
     return true;
 }
 
-struct movieCompareByEndTime {
-    __host__ __device__
-    bool operator()(const movie& a, const movie& b) const {
-        return a.endTime < b.endTime;
-    }
+
+struct Combination {
+    int count;
+    vector<Movie> movies;
 };
 
-struct isMovieInvalid {
-    int* categoryCounts;
-    int* categoriesMax;
-
-    __host__ __device__
-    isMovieInvalid(int* categoryCounts, int* categoriesMax)
-        : categoryCounts(categoryCounts), categoriesMax(categoriesMax) {}
-
-    __host__ __device__
-    bool operator()(const movie& m) const {
-        return categoryCounts[m.category - 1] >= categoriesMax[m.category - 1];
+vector<int> getCategoryCounts(const Combination& combination) {
+    vector<int> categoryCounts(10, 0);  // Assumindo que o máximo número de categorias é 10
+    for (const auto& movie : combination.movies) {
+        categoryCounts[movie.category]++;
     }
-};
-
-struct isTimeAvailable {
-    movie* chosenMovies;
-    int numChosenMovies;
-
-    __host__ __device__
-    isTimeAvailable(movie* chosenMovies, int numChosenMovies)
-        : chosenMovies(chosenMovies), numChosenMovies(numChosenMovies) {}
-
-    __host__ __device__
-    bool operator()(const movie& currentMovie) const {
-        for (int i = 0; i < numChosenMovies; i++) {
-            const movie& movie = chosenMovies[i];
-            if (currentMovie.startTime < movie.endTime && currentMovie.endTime > movie.startTime) {
-                return false;
-            }
-        }
-        return true;
-    }
-};
-
-thrust::host_vector<movie> chooseMovies(thrust::host_vector<movie>& movies, thrust::host_vector<int>& categoriesMax) {
-    thrust::host_vector<movie> chosenMovies;
-    int maxMovies = 0;
-
-    // Generate all possible subsets of movies
-    int numMovies = movies.size();
-    for (int mask = 0; mask < (1 << numMovies); mask++) {
-        thrust::host_vector<movie> currentSelection;
-        thrust::host_vector<int> categoryCounts(categoriesMax.size(), 0);
-        bool isValid = true;
-
-        // Check if the number of movies in each category is within the limits
-        for (int i = 0; i < numMovies; i++) {
-            if (mask & (1 << i)) {
-                movie currentMovie = movies[i];
-
-                // Check if the maximum limit for the category of the current movie has been reached
-                if (categoryCounts[currentMovie.category - 1] >= categoriesMax[currentMovie.category - 1]) {
-                    isValid = false;
-                    break;
-                }
-
-                // Check if the time slot is available
-                if (!isTimeAvailable(thrust::raw_pointer_cast(currentSelection.data()), currentSelection.size())(currentMovie)) {
-                    isValid = false;
-                    break;
-                }
-
-                categoryCounts[currentMovie.category - 1]++;
-                currentSelection.push_back(currentMovie);
-            }
-        }
-
-        // Update the maximum number of movies if the current selection is valid and has more movies
-        if (isValid && currentSelection.size() > maxMovies) {
-            maxMovies = currentSelection.size();
-            chosenMovies = currentSelection;
-        }
-    }
-
-    return chosenMovies;
+    return categoryCounts;
 }
 
-int main(int argc, char* argv[]) {
+bool checkCategoryLimits(const Combination& combination, const vector<int>& categoriesMax) {
+    vector<int> categoryCounts = getCategoryCounts(combination);
+    for (int i = 1; i <= categoriesMax.size(); i++) {
+        if (categoryCounts[i] > categoriesMax[i - 1]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool checkOverlap(const Movie& movie1, const Movie& movie2) {
+    return movie1.startTime < movie2.endTime && movie2.startTime < movie1.endTime;
+}
+
+Combination findMaxCombination(const thrust::device_vector<Movie>& deviceMovies, const vector<int>& categoriesMax,
+                        Combination& currentCombination, int currentIndex) {
+    if (currentIndex >= deviceMovies.size()) {
+        return currentCombination;
+    }
+
+    const Movie& currentMovie = deviceMovies[currentIndex];
+    bool canAddMovie = true;
+
+    for (const auto& movie : currentCombination.movies) {
+        if (checkOverlap(movie, currentMovie)) {
+            canAddMovie = false;
+            break;
+        }
+    }
+
+    Combination maxCombination = currentCombination;
+
+    if (canAddMovie) {
+        Combination withMovie = currentCombination;
+        withMovie.movies.push_back(currentMovie);
+        withMovie.count++;
+
+        if (checkCategoryLimits(withMovie, categoriesMax)) {
+            Combination combinationWithMovie = findMaxCombination(deviceMovies, categoriesMax, withMovie, currentIndex + 1);
+
+            if (combinationWithMovie.count > maxCombination.count) {
+                maxCombination = combinationWithMovie;
+            }
+        }
+    }
+
+    Combination withoutMovie = currentCombination;
+    Combination combinationWithoutMovie = findMaxCombination(deviceMovies, categoriesMax, withoutMovie, currentIndex + 1);
+
+    if (combinationWithoutMovie.count > maxCombination.count) {
+        maxCombination = combinationWithoutMovie;
+    }
+
+    return maxCombination;
+}
+
+
+
+int main(int argc, char *argv[]) {
     if (!validateArgs(argc, argv)) {
         return 1;
     }
@@ -130,8 +133,8 @@ int main(int argc, char* argv[]) {
 
     int N;
     int M;
-    thrust::host_vector<movie> movies;
-    thrust::host_vector<int> categoriesMax;
+    vector<Movie> movies;
+    vector<int> categoriesMax;
 
     infile >> N >> M;
 
@@ -142,24 +145,28 @@ int main(int argc, char* argv[]) {
     }
 
     for (int i = 0; i < N; i++) {
-        movie movie;
+        Movie movie;
         infile >> movie.startTime >> movie.endTime >> movie.category;
         movies.push_back(movie);
     }
 
     infile.close();
 
-    thrust::sort(thrust::host, movies.begin(), movies.end(), movieCompareByEndTime());
+    thrust::host_vector<Movie> hostMovies = movies;
+    thrust::device_vector<Movie> deviceMovies = hostMovies;
 
-    movies.erase(thrust::remove_if(thrust::host, movies.begin(), movies.end(), [](const movie& m) {
-        return m.endTime <= m.startTime;
-    }), movies.end());
+    thrust::sort(deviceMovies.begin(), deviceMovies.end(), CompareEndTime());
 
-    thrust::host_vector<movie> chosenMovies = chooseMovies(movies, categoriesMax);
+    deviceMovies.erase(thrust::remove_if(deviceMovies.begin(), deviceMovies.end(), IsNotOvernight()), deviceMovies.end());
 
-    cout << chosenMovies.size() << endl;
-    for (int i = 0; i < chosenMovies.size(); i++) {
-        cout << chosenMovies[i].startTime << " " << chosenMovies[i].endTime << " " << chosenMovies[i].category << endl;
+    thrust::host_vector<Movie> hostMoviesResult = deviceMovies;
+
+        Combination currentCombination;
+    Combination maxCombination = findMaxCombination(deviceMovies, categoriesMax, currentCombination, 0);
+
+    cout << maxCombination.movies.size() << endl;
+    for (const auto& movie : maxCombination.movies) {
+        cout << movie.startTime << " " << movie.endTime << " " << movie.category << endl;
     }
 
     return 0;
