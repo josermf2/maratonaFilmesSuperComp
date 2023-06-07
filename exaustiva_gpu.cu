@@ -56,7 +56,7 @@ struct Combination {
 };
 
 vector<int> getCategoryCounts(const Combination& combination) {
-    vector<int> categoryCounts(10, 0);  // Assumindo que o máximo número de categorias é 10
+    vector<int> categoryCounts(10, 0);
     for (const auto& movie : combination.movies) {
         categoryCounts[movie.category]++;
     }

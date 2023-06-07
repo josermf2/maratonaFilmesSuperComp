@@ -58,7 +58,6 @@ vector<movie> chooseMovies(vector<movie>& movies, vector<int>& categoriesMax) {
     vector<movie> chosenMovies;
     int maxMovies = 0;
 
-    // Generate all possible subsets of movies
     int numMovies = movies.size();
     #pragma omp parallel for
     for (int mask = 0; mask < (1 << numMovies); mask++) {
